@@ -111,7 +111,7 @@ Dual-Role Application:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/Sajith22/Assesment_Product_Bidding_app.git
+git clone https://github.com/Sajith22/Product_Bidding_app.git
 cd Bidding_app/bidding_app
 ```
 
