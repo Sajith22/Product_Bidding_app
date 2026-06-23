@@ -100,6 +100,35 @@ class NotificationService {
     await _db.collection('notifications').add(notif.toMap());
   }
 
+  /// Save a notification exactly once (idempotent) using a deterministic document id.
+  /// Useful for "winner" notifications where multiple clients may race.
+  Future<void> saveNotificationOnce({
+    required String userId,
+    required String key,
+    required String title,
+    required String body,
+    String? productId,
+  }) async {
+    final docId = '${userId}_$key';
+    final ref = _db.collection('notifications').doc(docId);
+
+    await _db.runTransaction((txn) async {
+      final snap = await txn.get(ref);
+      if (snap.exists) return;
+
+      final notif = AppNotification(
+        id: docId,
+        userId: userId,
+        title: title,
+        body: body,
+        productId: productId,
+        isRead: false,
+        timestamp: DateTime.now(),
+      );
+      txn.set(ref, notif.toMap());
+    });
+  }
+
   // ── Real-time notification stream for a user ───────────────────────────────
   Stream<List<AppNotification>> watchNotifications(String userId) {
     return _db

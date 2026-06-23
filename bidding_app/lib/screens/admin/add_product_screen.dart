@@ -2,8 +2,10 @@
 // screens/admin/add_product_screen.dart
 // Replaces old add_product_screen.dart — saves to Firestore.
 // ─────────────────────────────────────────────────────────────────────────────
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../theme/admin_theme.dart';
 import '../../models/app_models.dart';
 import '../../services/product_service.dart';
@@ -22,12 +24,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _priceCtrl     = TextEditingController();
   final _incrementCtrl = TextEditingController();
   final _service       = ProductService();
+  final _picker        = ImagePicker();
 
   DateTime _startTime       = DateTime.now().add(const Duration(hours: 1));
   int _durationHours        = 48;   // default 2 days
   bool _isPublished         = true;
   bool _loading             = false;
   String? _error;
+
+  Uint8List? _imageBytes;
+  String? _imageFileName;
 
   @override
   void dispose() {
@@ -59,6 +65,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1800,
+      );
+      if (picked == null) return;
+
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _imageBytes = bytes;
+        _imageFileName = picked.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Failed to pick image. Please try again.');
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
@@ -84,9 +111,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     final id = await _service.createProduct(product);
     if (!mounted) return;
-    setState(() => _loading = false);
 
     if (id != null) {
+      // Upload image if provided
+      if (_imageBytes != null) {
+        final url = await _service.uploadProductImageBytes(
+          productId: id,
+          bytes: _imageBytes!,
+          fileName: _imageFileName ?? 'image.jpg',
+        );
+        if (url != null) {
+          await _service.updateProduct(id, {'imageUrl': url});
+        }
+      }
+
+      if (!mounted) return;
+      setState(() => _loading = false);
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -95,6 +135,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       );
     } else {
+      if (!mounted) return;
+      setState(() => _loading = false);
       setState(() => _error = 'Failed to create product. Please try again.');
     }
   }
@@ -123,6 +165,114 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     _ErrorBox(_error!),
                     const SizedBox(height: 14),
                   ],
+
+                  _SectionCard(
+                    title: 'Product Photo',
+                    children: [
+                      GestureDetector(
+                        onTap: _loading ? null : _pickImage,
+                        child: Container(
+                          height: 180,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.border),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: _imageBytes != null
+                                    ? Image.memory(
+                                        _imageBytes!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        alignment: Alignment.center,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            Icon(Icons.add_photo_alternate_outlined,
+                                                size: 34,
+                                                color: AppTheme.textSecondary),
+                                            SizedBox(height: 8),
+                                            Text(
+                                              'Tap to add a photo',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppTheme.textSecondary),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              'JPG/PNG, recommended 1600px+',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppTheme.textMuted),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                              ),
+                              Positioned(
+                                right: 10,
+                                top: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: AppTheme.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.upload_rounded,
+                                          size: 16,
+                                          color: AppTheme.textSecondary),
+                                      SizedBox(width: 6),
+                                      Text('Choose',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                              color: AppTheme.textSecondary)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_imageBytes != null)
+                                Positioned(
+                                  left: 10,
+                                  top: 10,
+                                  child: GestureDetector(
+                                    onTap: _loading
+                                        ? null
+                                        : () => setState(() {
+                                              _imageBytes = null;
+                                              _imageFileName = null;
+                                            }),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.9),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: AppTheme.border),
+                                      ),
+                                      child: const Icon(Icons.close_rounded,
+                                          size: 16,
+                                          color: AppTheme.textSecondary),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
 
                   _SectionCard(
                     title: 'Product Details',

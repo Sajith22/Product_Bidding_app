@@ -142,7 +142,8 @@ class HotBadge extends StatelessWidget {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('🔥', style: TextStyle(fontSize: 10)),
+          Icon(Icons.local_fire_department_rounded,
+              size: 14, color: Colors.white),
           SizedBox(width: 3),
           Text(
             'HOT',

@@ -21,6 +21,7 @@ dependencies:
   flutter_local_notifications: ^17.2.3
 
   # ── Utilities ────────────────────────────────────────────────────────────
+  image_picker: ^1.2.1
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

@@ -3,20 +3,45 @@
 // All Firestore reads/writes for products and bids.
 // Used by both admin and user screens.
 // ─────────────────────────────────────────────────────────────────────────────
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/app_models.dart';
 
 class ProductService {
   final _db = FirebaseFirestore.instance;
+  final _storage = FirebaseStorage.instance;
 
   CollectionReference get _products => _db.collection('products');
 
   // ── ADMIN: Create product ─────────────────────────────────────────────────
   Future<String?> createProduct(Product product) async {
     try {
-      final doc = await _products.add(product.toMap());
+      final doc = _products.doc();
+      await doc.set(product.toMap());
       return doc.id;
     } catch (e) {
+      return null;
+    }
+  }
+
+  // ── ADMIN: Upload product image (bytes) ────────────────────────────────────
+  Future<String?> uploadProductImageBytes({
+    required String productId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final ext = (fileName.split('.').length > 1)
+          ? fileName.split('.').last.toLowerCase()
+          : 'jpg';
+      final safeExt = (ext == 'png' || ext == 'webp') ? ext : 'jpg';
+
+      final ref = _storage.ref('products/$productId/main.$safeExt');
+      final metadata = SettableMetadata(contentType: 'image/$safeExt');
+      final task = await ref.putData(bytes, metadata);
+      return await task.ref.getDownloadURL();
+    } catch (_) {
       return null;
     }
   }
@@ -151,24 +176,64 @@ class ProductService {
   }
 
   // ── Mark winner when bid ends (called by close-bid logic) ─────────────────
-  Future<bool> closeProduct(String productId) async {
+  Future<CloseProductResult> closeProduct(String productId) async {
     try {
-      final snap = await _products.doc(productId).get();
-      if (!snap.exists) return false;
+      final productRef = _products.doc(productId);
 
-      final product =
-          Product.fromMap(snap.data() as Map<String, dynamic>, snap.id);
+      return await _db.runTransaction<CloseProductResult>((txn) async {
+        final snap = await txn.get(productRef);
+        if (!snap.exists) {
+          return const CloseProductResult.failure('Product not found.');
+        }
 
-      if (product.highestBidderId == null) return false;
+        final data = snap.data() as Map<String, dynamic>;
+        final product = Product.fromMap(data, snap.id);
 
-      await _products.doc(productId).update({
-        'winnerId': product.highestBidderId,
-        'winnerName': product.highestBidderName,
-        'winningBid': product.currentHighestBid,
+        // Already closed / already has winner
+        if (product.endedAt != null || product.winnerId != null) {
+          return CloseProductResult.success(
+            productId: productId,
+            winnerId: product.winnerId,
+            winnerName: product.winnerName,
+            winningBid: product.winningBid,
+            didUpdate: false,
+          );
+        }
+
+        // If no bids, just end the auction (no winner)
+        if (product.highestBidderId == null) {
+          txn.update(productRef, {
+            'endedAt': DateTime.now().toIso8601String(),
+          });
+          return CloseProductResult.success(
+            productId: productId,
+            winnerId: null,
+            winnerName: null,
+            winningBid: null,
+            didUpdate: true,
+          );
+        }
+
+        final nowIso = DateTime.now().toIso8601String();
+        txn.update(productRef, {
+          'endedAt': nowIso,
+          'winnerId': product.highestBidderId,
+          'winnerName': product.highestBidderName,
+          'winningBid': product.currentHighestBid,
+        });
+
+        return CloseProductResult.success(
+          productId: productId,
+          winnerId: product.highestBidderId,
+          winnerName: product.highestBidderName,
+          winningBid: product.currentHighestBid,
+          didUpdate: true,
+        );
       });
-      return true;
-    } catch (e) {
-      return false;
+    } on FirebaseException catch (e) {
+      return CloseProductResult.failure(e.message ?? 'Firestore error.');
+    } catch (_) {
+      return const CloseProductResult.failure('Failed to close auction.');
     }
   }
 }
@@ -186,4 +251,44 @@ class BidResult {
 
   factory BidResult.failure(String msg) =>
       BidResult._(isSuccess: false, errorMessage: msg);
+}
+
+class CloseProductResult {
+  final bool isSuccess;
+  final String? errorMessage;
+  final String productId;
+  final String? winnerId;
+  final String? winnerName;
+  final double? winningBid;
+  final bool didUpdate; // true if this call actually updated the product doc
+
+  const CloseProductResult._({
+    required this.isSuccess,
+    this.errorMessage,
+    required this.productId,
+    required this.winnerId,
+    required this.winnerName,
+    required this.winningBid,
+    required this.didUpdate,
+  });
+
+  const CloseProductResult.success({
+    required this.productId,
+    required this.winnerId,
+    required this.winnerName,
+    required this.winningBid,
+    required this.didUpdate,
+  }) : isSuccess = true,
+       errorMessage = null;
+
+  const CloseProductResult.failure(String msg)
+      : this._(
+          isSuccess: false,
+          errorMessage: msg,
+          productId: '',
+          winnerId: null,
+          winnerName: null,
+          winningBid: null,
+          didUpdate: false,
+        );
 }

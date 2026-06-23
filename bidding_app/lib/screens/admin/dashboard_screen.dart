@@ -8,6 +8,7 @@ import '../../theme/admin_theme.dart';
 import '../../models/app_models.dart';
 import '../../services/product_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import 'add_product_screen.dart';
 import 'bid_history_screen.dart';
 import '../../../main.dart' show RoleGateway;
@@ -23,6 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _productService = ProductService();
   final _authService    = AuthService();
   String _filter = 'all';   // all | upcoming | live | ended
+  final Set<String> _finalizing = <String>{};
 
   Future<void> _signOut() async {
     await _authService.signOut();
@@ -72,6 +74,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           final all = snapshot.data!;
+          _maybeFinalizeEnded(all);
           final products = _filter == 'all'
               ? all
               : all.where((p) => p.status.label.toLowerCase() == _filter).toList();
@@ -106,6 +109,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
       ),
     );
+  }
+
+  void _maybeFinalizeEnded(List<Product> products) {
+    for (final p in products) {
+      if (p.status != BidStatus.ended) continue;
+      if (p.winnerId != null || p.endedAt != null) continue;
+      if (p.highestBidderId == null) continue;
+      if (_finalizing.contains(p.id)) continue;
+
+      _finalizing.add(p.id);
+      () async {
+        final res = await _productService.closeProduct(p.id);
+        if (res.isSuccess && res.winnerId != null && res.winningBid != null) {
+          await NotificationService().saveNotificationOnce(
+            userId: res.winnerId!,
+            key: 'winner_${p.id}',
+            title: 'Auction won',
+            body:
+                'You won "${p.title}" with a bid of \$${res.winningBid!.toStringAsFixed(2)}.',
+            productId: p.id,
+          );
+        }
+        _finalizing.remove(p.id);
+      }();
+    }
   }
 }
 
@@ -298,6 +326,32 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: product.imageUrl != null
+                    ? Image.network(
+                        product.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppTheme.border,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.image_not_supported_outlined,
+                              color: AppTheme.textSecondary),
+                        ),
+                      )
+                    : Container(
+                        color: AppTheme.border,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.image_outlined,
+                            color: AppTheme.textSecondary, size: 34),
+                      ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
             // Header row
             Row(
               children: [
@@ -341,7 +395,7 @@ class _ProductCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
 
-            const Spacer(),
+            const SizedBox(height: 12),
 
             // Price row
             Row(
@@ -373,12 +427,20 @@ class _ProductCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: AppTheme.success),
                     ),
-                    child: Text(
-                      '🏆 ${product.winnerName}',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.success),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.emoji_events_rounded,
+                            size: 14, color: AppTheme.success),
+                        const SizedBox(width: 6),
+                        Text(
+                          product.winnerName!,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.success),
+                        ),
+                      ],
                     ),
                   ),
               ],

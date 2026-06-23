@@ -31,17 +31,19 @@ class BidHistoryScreen extends StatelessWidget {
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
-                  builder: (_) => AlertDialog(
+                  builder: (dialogContext) => AlertDialog(
                     title: const Text('Close Auction?'),
                     content: const Text(
                         'This will end the bidding and declare a winner.'),
                     actions: [
                       TextButton(
-                        onPressed: () => Navigator.pop(context, false),
+                        onPressed: () =>
+                            Navigator.pop(dialogContext, false),
                         child: const Text('Cancel'),
                       ),
                       ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
+                        onPressed: () =>
+                            Navigator.pop(dialogContext, true),
                         style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.error),
                         child: const Text('Close Auction'),
@@ -51,14 +53,17 @@ class BidHistoryScreen extends StatelessWidget {
                 );
 
                 if (confirm == true) {
-                  await service.closeProduct(product.id);
-                  // Send winner notification
-                  if (product.highestBidderId != null) {
-                    await NotificationService().saveNotification(
-                      userId: product.highestBidderId!,
-                      title: '🏆 You Won!',
+                  final result = await service.closeProduct(product.id);
+                  if (!result.isSuccess) return;
+
+                  // Send winner notification (idempotent)
+                  if (result.winnerId != null && result.winningBid != null) {
+                    await NotificationService().saveNotificationOnce(
+                      userId: result.winnerId!,
+                      key: 'winner_${product.id}',
+                      title: 'Auction won',
                       body:
-                          'Congratulations! Your bid of \$${product.currentHighestBid.toStringAsFixed(2)} won "${product.title}".',
+                          'You won "${product.title}" with a bid of \$${result.winningBid!.toStringAsFixed(2)}.',
                       productId: product.id,
                     );
                   }
@@ -145,7 +150,9 @@ class BidHistoryScreen extends StatelessWidget {
                             color: AppTheme.success, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'Winner: ${product.winnerName} — \$${product.winningBid?.toStringAsFixed(2)}',
+                          product.winningBid != null
+                              ? 'Winner: ${product.winnerName} — \$${product.winningBid!.toStringAsFixed(2)}'
+                              : 'Winner: ${product.winnerName}',
                           style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               color: AppTheme.success),

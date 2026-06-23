@@ -79,6 +79,7 @@ class Product {
   final String? highestBidderName;
   final DateTime startTime;
   final Duration duration;          // bidding window length
+  final DateTime? endedAt;          // manual/forced end (null = time-based only)
   final double? minIncrement;
   final bool isPublished;
   final String? winnerId;
@@ -98,6 +99,7 @@ class Product {
     this.highestBidderName,
     required this.startTime,
     required this.duration,
+    this.endedAt,
     this.minIncrement,
     required this.isPublished,
     this.winnerId,
@@ -108,6 +110,7 @@ class Product {
 
   /// Derived status — computed from current time vs startTime + duration
   BidStatus get status {
+    if (endedAt != null) return BidStatus.ended;
     final now = DateTime.now();
     final endTime = startTime.add(duration);
     if (now.isBefore(startTime)) return BidStatus.upcoming;
@@ -135,6 +138,7 @@ class Product {
       highestBidderName: map['highestBidderName'],
       startTime: DateTime.parse(map['startTime']),
       duration: Duration(minutes: (map['durationMinutes'] ?? 2880)),
+      endedAt: DateTime.tryParse(map['endedAt'] ?? ''),
       minIncrement: map['minIncrement']?.toDouble(),
       isPublished: map['isPublished'] ?? false,
       winnerId: map['winnerId'],
@@ -155,6 +159,7 @@ class Product {
     'highestBidderName': highestBidderName,
     'startTime': startTime.toIso8601String(),
     'durationMinutes': duration.inMinutes,
+    'endedAt': endedAt?.toIso8601String(),
     'minIncrement': minIncrement,
     'isPublished': isPublished,
     'winnerId': winnerId,

@@ -111,7 +111,7 @@ class _AuctionDetailScreenState extends State<AuctionDetailScreen> {
                                     Icon(Icons.emoji_events_rounded,
                                         color: Colors.white, size: 36),
                                     SizedBox(height: 8),
-                                    Text('🏆 YOU WON!',
+                                    Text('YOU WON',
                                         style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w900,
