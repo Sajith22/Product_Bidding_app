@@ -45,6 +45,11 @@ class _AuctionResultScreenState extends State<AuctionResultScreen>
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
+    // Price calculations moved here (can't declare variables inside children list)
+    final winBid = product.winningBid ?? product.currentHighestBid;
+    final premium = winBid * 0.05;
+    final shipping = 15.0;
+    final total = winBid + premium + shipping;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -276,15 +281,9 @@ class _AuctionResultScreenState extends State<AuctionResultScreen>
                         ),
 
                         // Price breakdown
-                        final winBid = product.winningBid ??
-                            product.currentHighestBid;
-                        final premium  = winBid * 0.05;
-                        final shipping = 15.0;
-                        final total    = winBid + premium + shipping;
-
                         _PriceRow(
-                            label: 'Hammer Price',
-                            value: '\$${winBid.toStringAsFixed(2)}'),
+                          label: 'Hammer Price',
+                          value: '\$${winBid.toStringAsFixed(2)}'),
                         const SizedBox(height: 8),
                         _PriceRow(
                             label: "Buyer's Premium (5%)",
