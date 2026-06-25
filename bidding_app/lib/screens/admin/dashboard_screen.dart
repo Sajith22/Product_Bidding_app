@@ -500,6 +500,8 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
+
+
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
