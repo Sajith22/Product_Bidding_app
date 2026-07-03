@@ -2,23 +2,17 @@ name: Deploy Flutter Web to Firebase Hosting
 
 on:
   push:
-    branches: [relese_branch]   # ඔබේ branch name
+    branches: [relese_branch]
 
 defaults:
   run:
-    working-directory: .        # හෝ ./bidding_app (check after diagnosis)
+    working-directory: ./bidding_app   # ← මෙන්න fix එක
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # 🛜️ Diagnostic step: show current directory and files (optional, debug)
-      - name: Show workspace
-        run: |
-          pwd
-          ls -la
 
       - uses: subosito/flutter-action@v2
         with:
