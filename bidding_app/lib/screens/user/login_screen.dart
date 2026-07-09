@@ -35,6 +35,9 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    _notifService.requestPermission();
+
     setState(() { _loading = true; _error = null; });
 
     final result = await _authService.login(

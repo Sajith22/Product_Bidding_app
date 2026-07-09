@@ -1,56 +1,46 @@
 // services/notification_service.dart
-// Rewritten — flutter_local_notifications REMOVED entirely.
-// Its API has broken between versions repeatedly; it's not actually required
-// by the assignment. FCM (firebase_messaging) handles background system
-// notifications automatically. Foreground messages + the in-app bell/badge
-// are handled via the Firestore-backed AppNotification stream below.
+// FIX: requestPermission() removed from automatic init() — browsers refuse
+// permission prompts that aren't triggered by a real user click. init()
+// now only sets up listeners/handlers, which is safe to do automatically.
+// Call requestPermission() separately, from inside a real button's onPressed.
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/app_models.dart';
 
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Firebase is already initialized by this point.
-  // Background system notifications are shown automatically by the OS
-  // when the FCM payload includes a `notification` block — no extra
-  // package needed for that.
-}
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
 
 class NotificationService {
   final _fcm = FirebaseMessaging.instance;
   final _db  = FirebaseFirestore.instance;
 
-  /// Optional hook the UI can set to react to a foreground push
-  /// (e.g. show a SnackBar / in-app banner). Safe to leave unset.
   void Function(RemoteMessage message)? onForegroundMessage;
 
-  // ── Initialize ─────────────────────────────────────────────────────────────
+  // ── Safe to call automatically at app startup — no permission prompt here ──
   Future<void> init() async {
-    // Request permission (iOS / Android 13+)
-    await _fcm.requestPermission(alert: true, badge: true, sound: true);
-
-    // Foreground message handler — just forwards to the optional hook,
-    // and the Firestore AppNotification system covers the in-app bell/badge.
     FirebaseMessaging.onMessage.listen((message) {
       onForegroundMessage?.call(message);
     });
-
-    // Background handler registration
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
 
-  // ── Get FCM token ──────────────────────────────────────────────────────────
+  // ── NEW: call this from inside a real click handler, e.g. the Sign In
+  // button's onPressed, as the very first synchronous line — before any
+  // `await`. That's what makes the browser treat it as a genuine user
+  // gesture instead of silently blocking it.
+  Future<void> requestPermission() async {
+    await _fcm.requestPermission(alert: true, badge: true, sound: true);
+  }
+
   Future<String?> getToken() => _fcm.getToken();
 
-  // ── Topic subscriptions ────────────────────────────────────────────────────
   Future<void> subscribeToProduct(String productId) =>
       _fcm.subscribeToTopic('product_$productId');
 
   Future<void> unsubscribeFromProduct(String productId) =>
       _fcm.unsubscribeFromTopic('product_$productId');
 
-  // ── Save in-app notification record to Firestore ───────────────────────────
   Future<void> saveNotification({
     required String userId,
     required String title,
@@ -69,9 +59,6 @@ class NotificationService {
     await _db.collection('notifications').add(notif.toMap());
   }
 
-  /// Save a notification exactly once (idempotent) using a deterministic
-  /// document id. Useful for "winner" notifications where multiple clients
-  /// might race to write the same event.
   Future<void> saveNotificationOnce({
     required String userId,
     required String key,
@@ -99,7 +86,6 @@ class NotificationService {
     });
   }
 
-  // ── Real-time notification stream for a user ───────────────────────────────
   Stream<List<AppNotification>> watchNotifications(String userId) {
     return _db
         .collection('notifications')
@@ -111,7 +97,6 @@ class NotificationService {
             .toList());
   }
 
-  // ── Mark a notification as read ────────────────────────────────────────────
   Future<void> markRead(String notifId) async {
     await _db
         .collection('notifications')
@@ -119,7 +104,6 @@ class NotificationService {
         .update({'isRead': true});
   }
 
-  // ── Unread count stream ────────────────────────────────────────────────────
   Stream<int> watchUnreadCount(String userId) {
     return _db
         .collection('notifications')
