@@ -1,0 +1,31 @@
+name: Deploy Flutter Web to Firebase Hosting
+
+on:
+  push:
+    branches: [relese_branch]
+
+defaults:
+  run:
+    working-directory: ./bidding_app   # ← මෙන්න fix එක
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build web
+        run: flutter build web --release
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase Hosting
+        run: firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project biddingapp-2b035
